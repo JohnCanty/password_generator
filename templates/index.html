@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Password Generator</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Secure Password Generator</h1>
+            <p class="subtitle">Cryptographically secure passwords using Python's secrets module</p>
+        </div>
+
+        <div class="card">
+            <!-- Password Display Section -->
+            <div class="password-display-section">
+                <div class="password-display" id="passwordDisplay">
+                    <span class="placeholder">Your secure password will appear here</span>
+                </div>
+                <button class="btn btn-copy" id="copyBtn" disabled>
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M4 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                        <path d="M6 0h6a2 2 0 0 1 2 2v6" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                    </svg>
+                    Copy
+                </button>
+            </div>
+
+            <!-- Password Strength Indicator -->
+            <div class="strength-indicator" id="strengthIndicator" style="display: none;">
+                <div class="strength-label">Password Strength:</div>
+                <div class="strength-bar">
+                    <div class="strength-fill" id="strengthFill"></div>
+                </div>
+                <div class="strength-text" id="strengthText"></div>
+            </div>
+
+            <!-- Options Section -->
+            <div class="options-section">
+                <!-- Password Length -->
+                <div class="form-group">
+                    <label for="passwordLength">Password Length</label>
+                    <input 
+                        type="number" 
+                        id="passwordLength" 
+                        class="form-control" 
+                        value="8" 
+                        min="4" 
+                        max="128"
+                    >
+                </div>
+
+                <!-- Quick Select Buttons -->
+                <div class="form-group">
+                    <label>Quick Select</label>
+                    <div class="quick-select-buttons">
+                        <button class="btn btn-quick" data-length="8">8</button>
+                        <button class="btn btn-quick" data-length="10">10</button>
+                        <button class="btn btn-quick" data-length="12">12</button>
+                        <button class="btn btn-quick" data-length="16">16</button>
+                    </div>
+                </div>
+
+                <!-- Special Characters -->
+                <div class="form-group">
+                    <label for="specialChars">Custom Special Characters (comma-separated)</label>
+                    <input 
+                        type="text" 
+                        id="specialChars" 
+                        class="form-control" 
+                        value="!, @, #, *"
+                        placeholder="e.g., !, @, #, $, %, &"
+                    >
+                    <small class="form-help">Enter special characters separated by commas</small>
+                </div>
+
+                <!-- Exclude Ambiguous Characters -->
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input 
+                            type="checkbox" 
+                            id="excludeAmbiguous" 
+                            checked
+                        >
+                        <span>Exclude ambiguous characters (0, O, l, 1, I)</span>
+                    </label>
+                    <small class="form-help">Helps avoid confusion when typing passwords</small>
+                </div>
+
+                <!-- Generate Button -->
+                <button class="btn btn-generate" id="generateBtn">
+                    Generate Password
+                </button>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p>✓ Cryptographically secure random generation</p>
+            <p>✓ No passwords are stored or transmitted yet, next iteration will generate passwords on the server and transmit then via https.</p>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
