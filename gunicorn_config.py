@@ -6,6 +6,11 @@ Gunicorn configuration file for Password Generator application
 bind = "0.0.0.0:2048"
 backlog = 2048
 
+# TLS
+certfile = "/etc/ssl/password_generator/cert.pem"
+keyfile = "/etc/ssl/password_generator/key.pem"
+do_handshake_on_connect = True
+
 # Worker processes
 workers = 2
 worker_class = "sync"

@@ -99,7 +99,9 @@
         <!-- Footer -->
         <div class="footer">
             <p>✓ Cryptographically secure random generation</p>
-            <p>✓ No passwords are stored or transmitted yet, next iteration will generate passwords on the server and transmit then via https.</p>
+            <p>Browser makes a POST API request to /api/generate</p>
+            <p>Password is generated server-side and returned in the response</p>
+            <p>Intended for TLS-secured connections to a server with a Random Noise seed.</p>
         </div>
     </div>
 
