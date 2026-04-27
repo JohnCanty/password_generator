@@ -1,321 +1,311 @@
 # Secure Password Generator
 
-A Flask-based web application for generating cryptographically secure passwords using Python's `secrets` module. Designed to run on Raspberry Pi with TruRNG hardware entropy source for maximum security.
+A Flask-based password generator with two generation modes:
+
+- Server mode is the default. The browser sends generation options to the Flask API, and the server returns the generated password.
+- Local mode is optional. The browser uses the Web Crypto API so the generated password never leaves the browser.
+
+The project is designed for small self-hosted deployments, but it now includes the basic controls expected for an internet-facing service: rate limiting, request-size limits, restrictive security headers, no-store cache headers for secret-bearing responses, and safer Gunicorn defaults.
+
+## Security Model
+
+- Server mode transmits the generated password from the server to the browser. Use HTTPS end to end and assume the password is visible to the application server and any TLS terminator or proxy that handles the response.
+- Local mode keeps password generation in the browser and avoids transmitting the generated password to the server.
+- The application does not intentionally persist generated passwords to disk or a database.
+- The `/api/generate` endpoint is rate limited and only accepts JSON requests.
+- The `/health` endpoint is restricted to localhost by default.
+- Gunicorn binds to `127.0.0.1:2048` by default so a reverse proxy can handle public TLS and network controls.
+
+## Project Layout
+
+- `app.py`: Flask routes, input validation, security headers, rate limiting, and server-side password generation.
+- `gunicorn_config.py`: Hardened Gunicorn defaults and startup validation for public binds and TLS settings.
+- `templates/index.html`: Main UI, including the local-generation toggle.
+- `static/script.js`: Browser behavior, local Web Crypto generation, API calls, strength display, and clipboard support.
+- `static/style.css`: Application styling.
+- `requirements.txt`: Python package dependencies.
 
 ## Features
 
-- **Cryptographically Secure**: Uses Python's `secrets` module for secure random number generation
-- **Customizable Length**: Generate passwords from 4 to 128 characters
-- **Quick Select**: Pre-configured buttons for common password lengths (8, 10, 12, 16)
-- **Custom Special Characters**: Define your own set of special characters (comma-separated)
-- **Exclude Ambiguous Characters**: Option to exclude easily confused characters (0, O, l, 1, I)
-- **Password Strength Indicator**: Visual feedback on password strength (weak/medium/strong)
-- **Copy to Clipboard**: One-click copying with visual feedback
-- **Input Sanitization**: All user inputs are properly sanitized for security
-- **Clean UI**: Modern, responsive interface that works on all devices
-- **No Data Storage**: Passwords are never stored or transmitted (client-side only)
+- Cryptographically secure password generation using Python `secrets` in server mode.
+- Cryptographically secure password generation using the Web Crypto API in local mode.
+- Password lengths from 4 to 128 characters.
+- Configurable punctuation characters.
+- Optional exclusion of ambiguous characters: `0`, `O`, `l`, `1`, `I`.
+- Visual password-strength indicator.
+- Copy-to-clipboard support.
+- JSON API for server-side generation.
+- Security headers and no-store cache headers on the main page and API responses.
 
 ## Requirements
 
-- Python 3.7 or higher
-- pip (Python package installer)
-- virtualenv (recommended)
+- Python 3.9 or newer.
+- `pip`.
+- A virtual environment is strongly recommended.
+- A reverse proxy such as Nginx, Caddy, or a cloud load balancer for public deployments.
 
 ## Installation
 
-### Step 1: Navigate to Project Directory
-
 ```bash
 cd /home/user/password_generator
-```
-
-### Step 2: Create Python Virtual Environment
-
-```bash
 python3 -m venv venv
-```
-
-This creates an isolated Python environment in the `venv` directory.
-
-### Step 3: Activate Virtual Environment
-
-```bash
 source venv/bin/activate
-```
-
-You should see `(venv)` appear in your terminal prompt, indicating the virtual environment is active.
-
-### Step 4: Install Dependencies
-
-```bash
 pip install -r requirements.txt
 ```
 
-This installs Flask, Gunicorn, and all required dependencies.
+## Running The Application
 
-## Running the Application
+### Development
 
-### Option 1: Using Gunicorn (Recommended for Production)
-
-```bash
-gunicorn -c gunicorn_config.py app:app
-```
-
-This starts the application on port 2048 using the Gunicorn WSGI server.
-
-### Option 2: Running Gunicorn in Background
-
-To run the application as a background process:
-
-```bash
-gunicorn -c gunicorn_config.py app:app &
-```
-
-To stop the background process later:
-
-```bash
-# Find the process ID
-ps aux | grep gunicorn
-
-# Kill the process (replace PID with actual process ID)
-kill <PID>
-```
-
-### Option 3: Using Flask Development Server (Testing Only)
-
-For development/testing purposes only:
+The built-in Flask server now binds to localhost by default:
 
 ```bash
 python app.py
 ```
 
-**Warning**: The Flask development server is not suitable for production use.
+Open:
 
-## Accessing the Application
-
-Once the application is running, open your web browser and navigate to:
-
-```
-http://localhost:2048
+```text
+http://127.0.0.1:2048
 ```
 
-Or if accessing from another device on your network:
+### Production With Gunicorn
 
+Gunicorn also binds to localhost by default so that a reverse proxy can publish the service securely:
+
+```bash
+gunicorn -c gunicorn_config.py app:app
 ```
-http://<raspberry-pi-ip>:2048
+
+By default, this listens on:
+
+```text
+127.0.0.1:2048
 ```
 
-Replace `<raspberry-pi-ip>` with your Raspberry Pi's IP address (find it using `hostname -I`).
+### Production With Caddy
 
-## Using the Password Generator
+The repository now includes a production-oriented [Caddyfile](Caddyfile) for automatic HTTPS and reverse proxying to Gunicorn on localhost.
 
-1. **Set Password Length**: Enter a custom length (4-128) or click a quick-select button (8, 10, 12, 16)
-2. **Customize Special Characters**: Enter comma-separated special characters (default: !, @, #, *)
-3. **Exclude Ambiguous**: Keep checkbox checked to avoid confusing characters (0, O, l, 1, I)
-4. **Generate**: Click "Generate Password" button
-5. **Copy**: Click the "Copy" button to copy password to clipboard
-6. **Strength Indicator**: View password strength (weak/medium/strong)
+Before using it:
+
+- Replace `admin@example.com` with your ACME contact email.
+- Replace `passwords.example.com` with the real public hostname for the service.
+- Keep Gunicorn bound to `127.0.0.1:2048`.
+- Run the Flask app with `TRUST_PROXY_HEADERS=true` so Flask interprets forwarded scheme and host values correctly.
+
+On Debian 13, a typical flow is:
+
+```bash
+sudo apt update
+sudo apt install -y caddy
+sudo cp /path/to/password_generator/Caddyfile /etc/caddy/Caddyfile
+sudo systemctl reload caddy
+```
+
+If you manage Gunicorn with `systemd`, add `Environment=TRUST_PROXY_HEADERS=true` to the service unit.
 
 ## Configuration
 
-### Changing Port
+The application is configured through environment variables.
 
-To run on a different port, edit `gunicorn_config.py`:
+- `FLASK_RUN_HOST`: Override the Flask development server bind address. Default: `127.0.0.1`.
+- `FLASK_RUN_PORT`: Override the Flask development server port. Default: `2048`.
+- `LOCAL_GENERATION_DEFAULT`: Set to `true` to default the UI to browser-side generation.
+- `MAX_CONTENT_LENGTH_BYTES`: Maximum request size accepted by Flask. Default: `4096`.
+- `GENERATE_RATE_LIMIT`: Rate limit applied to `POST /api/generate`. Default: `30 per minute`.
+- `RATELIMIT_STORAGE_URI`: Storage backend for Flask-Limiter. Default: `memory://`.
+- `TRUST_PROXY_HEADERS`: Set to `true` when running behind a reverse proxy that sets forwarded headers.
+- `ALLOW_REMOTE_HEALTHCHECKS`: Set to `true` if a remote monitor must access `/health`.
 
-```python
-bind = "0.0.0.0:YOUR_PORT"
+Gunicorn-specific settings:
+
+- `GUNICORN_BIND`: Gunicorn bind target. Default: `127.0.0.1:2048`.
+- `GUNICORN_WORKERS`: Worker count. Default: `2`.
+- `GUNICORN_TIMEOUT`: Worker timeout in seconds. Default: `30`.
+- `GUNICORN_KEEPALIVE`: Keepalive timeout in seconds. Default: `2`.
+- `TLS_CERTFILE`: PEM certificate file when Gunicorn terminates TLS directly.
+- `TLS_KEYFILE`: PEM private key file when Gunicorn terminates TLS directly.
+- `ALLOW_INSECURE_PUBLIC_BIND`: Set to `true` only if you intentionally bind Gunicorn publicly without TLS and accept that risk.
+- `FORWARDED_ALLOW_IPS`: Proxy IP allowlist for forwarded headers. Default: `127.0.0.1,::1`.
+
+## Reverse Proxy Guidance
+
+For public deployments, run Gunicorn behind a reverse proxy. The proxy should:
+
+- Terminate HTTPS.
+- Redirect HTTP to HTTPS.
+- Restrict request sizes.
+- Apply connection or request-rate controls.
+- Forward `X-Forwarded-For` and `X-Forwarded-Proto` only from trusted sources.
+
+The included [Caddyfile](Caddyfile) does the following:
+
+- Terminates HTTPS automatically.
+- Compresses responses with `zstd` and `gzip`.
+- Caps request bodies at `4KB` to match the Flask-side request size limit.
+- Proxies traffic to Gunicorn on `127.0.0.1:2048`.
+- Performs active health checks against `/health`.
+- Writes JSON access logs to `/var/log/caddy/password-generator-access.log`.
+
+Example Caddy configuration:
+
+```caddyfile
+{
+  email admin@example.com
+}
+
+passwords.example.com {
+  encode zstd gzip
+
+  request_body {
+    max_size 4KB
+  }
+
+  header {
+    -Server
+  }
+
+  reverse_proxy 127.0.0.1:2048 {
+    health_uri /health
+    health_interval 30s
+    health_timeout 5s
+  }
+
+  log {
+    output file /var/log/caddy/password-generator-access.log {
+      roll_size 10MiB
+      roll_keep 10
+      roll_keep_for 720h
+    }
+    format json
+  }
+}
 ```
 
-Or specify it directly in the command:
+Example Nginx site configuration:
 
-```bash
-gunicorn -b 0.0.0.0:YOUR_PORT app:app
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name passwords.example.com;
+
+    ssl_certificate /etc/letsencrypt/live/passwords.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/passwords.example.com/privkey.pem;
+
+    client_max_body_size 4k;
+
+    location / {
+        proxy_pass http://127.0.0.1:2048;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+}
 ```
 
-### Worker Configuration
+If you enable `TRUST_PROXY_HEADERS=true`, make sure only your trusted reverse proxy can send forwarded headers.
 
-Adjust the number of worker processes in `gunicorn_config.py`:
+## UI Behavior
 
-```python
-workers = 2  # Change based on your CPU cores
-```
+The main page exposes a checkbox labeled `Generate locally in this browser`.
 
-Recommended: 2-4 workers for Raspberry Pi 4, 1-2 for older models.
+- Unchecked: server mode. The browser calls `POST /api/generate`.
+- Checked: local mode. The browser generates the password with `window.crypto.getRandomValues`.
 
-## Security Features
-
-- **Cryptographic Random Generation**: Uses `secrets.choice()` for cryptographically strong randomness
-- **Input Sanitization**: All user inputs are validated and sanitized
-- **No Password Storage**: Passwords are generated client-side and never stored
-- **XSS Protection**: HTML escaping prevents cross-site scripting
-- **CORS Protection**: Flask's default CORS policy prevents unauthorized access
-
-## Troubleshooting
-
-### Port Already in Use
-
-If port 2048 is already in use:
-
-```bash
-# Find process using port 2048
-sudo lsof -i :2048
-
-# Kill the process
-sudo kill -9 <PID>
-```
-
-### Permission Denied on Port
-
-If you get permission errors, either:
-- Use a port above 1024 (like 2048 - already configured)
-- Or run with sudo (not recommended): `sudo gunicorn -c gunicorn_config.py app:app`
-
-### Virtual Environment Issues
-
-If you have issues with the virtual environment:
-
-```bash
-# Deactivate current environment
-deactivate
-
-# Remove old environment
-rm -rf venv
-
-# Create fresh environment
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
-
-## Starting on Boot (Optional)
-
-To automatically start the application on system boot, create a systemd service:
-
-1. Create service file:
-
-```bash
-sudo nano /etc/systemd/system/password-generator.service
-```
-
-2. Add the following content (adjust paths as needed):
-
-```ini
-[Unit]
-Description=Password Generator Web Application
-After=network.target
-
-[Service]
-Type=notify
-User=user
-WorkingDirectory=/home/user/password_generator
-Environment="PATH=/home/user/password_generator/venv/bin"
-ExecStart=/home/user/password_generator/venv/bin/gunicorn -c gunicorn_config.py app:app
-ExecReload=/bin/kill -s HUP $MAINPID
-KillMode=mixed
-KillSignal=SIGTERM
-PrivateTmp=true
-
-[Install]
-WantedBy=multi-user.target
-```
-
-3. Enable and start the service:
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable password-generator
-sudo systemctl start password-generator
-```
-
-4. Check status:
-
-```bash
-sudo systemctl status password-generator
-```
+The default remains server mode unless `LOCAL_GENERATION_DEFAULT=true` is set.
 
 ## API Documentation
 
-### Generate Password Endpoint
+### `POST /api/generate`
 
-**URL**: `/api/generate`  
-**Method**: `POST`  
-**Content-Type**: `application/json`
+Request body:
 
-**Request Body**:
 ```json
 {
-    "length": 12,
-    "special_chars": "!,@,#,$,%,&,*",
-    "exclude_ambiguous": true
+  "length": 12,
+  "special_chars": "!, @, #, $",
+  "exclude_ambiguous": true
 }
 ```
 
-**Response**:
+Notes:
+
+- The request body must be JSON.
+- `length` is clamped to the range `4..128`.
+- `special_chars` accepts punctuation characters and ignores other input.
+- Duplicate special characters are removed.
+
+Successful response:
+
 ```json
 {
-    "success": true,
-    "password": "password is here",
-    "strength": "strong",
-    "length": 12
+  "success": true,
+  "password": "example-password",
+  "strength": "strong",
+  "length": 12,
+  "mode": "server"
 }
 ```
 
-### Health Check Endpoint
+Error response:
 
-**URL**: `/health`  
-**Method**: `GET`
-
-**Response**:
 ```json
 {
-    "status": "healthy"
+  "success": false,
+  "error": "Malformed JSON request."
 }
 ```
 
-## Contributing
+### `GET /health`
 
-This is a standalone application. Feel free to modify and customize it for your needs.
+Successful response:
+
+```json
+{
+  "status": "healthy"
+}
+```
+
+By default, this endpoint only answers localhost requests.
+
+## Security Controls Implemented
+
+- `Content-Security-Policy` restricts scripts, styles, and outbound connections to same-origin resources.
+- `X-Frame-Options: DENY` blocks clickjacking via framing.
+- `X-Content-Type-Options: nosniff` disables MIME sniffing.
+- `Referrer-Policy: no-referrer` avoids leaking URLs via referrers.
+- `Strict-Transport-Security` is sent on HTTPS responses.
+- `Cache-Control: no-store` is sent for the main page and API responses.
+- The API rejects malformed or non-JSON request bodies.
+- The API enforces a per-client rate limit.
+- Gunicorn refuses a public bind without TLS unless explicitly overridden.
+
+## Operational Notes
+
+- Local mode is the safer choice for users who do not need server-side generation.
+- If you front the app with a reverse proxy, prefer binding Gunicorn to localhost and do not expose port `2048` publicly.
+- The in-memory rate-limit backend is adequate for a single-process or single-host deployment. For multiple application instances, configure a shared backend such as Redis with `RATELIMIT_STORAGE_URI`.
+- Review and update dependencies regularly.
+
+## Troubleshooting
+
+### `403 Cross-origin requests are not allowed`
+
+The API saw an `Origin` header that did not match the current host. Make sure your reverse proxy forwards the correct host header and enable `TRUST_PROXY_HEADERS=true` when appropriate.
+
+### `403 Health checks are only available from localhost`
+
+Your monitoring system is reaching `/health` remotely. Either route the health check through a local reverse proxy or set `ALLOW_REMOTE_HEALTHCHECKS=true`.
+
+### `429 Too Many Requests`
+
+The client exceeded `GENERATE_RATE_LIMIT`. Increase the limit if your deployment requires it, but do not remove it for public deployments.
+
+### Gunicorn refuses to start with a public bind
+
+If `GUNICORN_BIND` is set to `0.0.0.0:2048` or another public bind, configure `TLS_CERTFILE` and `TLS_KEYFILE`, or switch back to the default localhost bind and place a reverse proxy in front.
 
 ## License
 
-This project is open source "The Unlicense"
-
-## Acknowledgments
-
-- Built with Flask and Gunicorn
-- Designed for Raspberry Pi with TruRNG hardware entropy source
-- Uses Python's `secrets` module for cryptographic security
-
-## Support
-
-If you encounter any issues:
-1. Check the troubleshooting section above
-2. Verify all dependencies are installed: `pip list`
-3. Check Gunicorn logs for errors
-4. Ensure port 2048 is not blocked by firewall
-
----
-
-**Note**: This application runs on localhost (127.0.0.1) of the Raspberry Pi. To access it from other devices on your network, use the Raspberry Pi's IP address instead of localhost.
-
-## Quick Start
-
-```bash
-# 1. Navigate to directory
-cd /home/user/password_generator
-
-# 2. Create virtual environment
-python3 -m venv venv
-
-# 3. Activate virtual environment
-source venv/bin/activate
-
-# 4. Install dependencies
-pip install -r requirements.txt
-
-# 5. Run application
-gunicorn -c gunicorn_config.py app:app
-
-# 6. Open browser
-# Visit: http://localhost:2048
-```
+This project is released under The Unlicense. See `LICENSE` for details.

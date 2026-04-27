@@ -1,0 +1,30 @@
+{
+    email admin@example.com
+}
+
+passwords.example.com {
+    encode zstd gzip
+
+    request_body {
+        max_size 4KB
+    }
+
+    header {
+        -Server
+    }
+
+    reverse_proxy 127.0.0.1:2048 {
+        health_uri /health
+        health_interval 30s
+        health_timeout 5s
+    }
+
+    log {
+        output file /var/log/caddy/password-generator-access.log {
+            roll_size 10MiB
+            roll_keep 10
+            roll_keep_for 720h
+        }
+        format json
+    }
+}

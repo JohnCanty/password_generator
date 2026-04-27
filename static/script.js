@@ -4,11 +4,24 @@ const copyBtn = document.getElementById('copyBtn');
 const generateBtn = document.getElementById('generateBtn');
 const passwordLength = document.getElementById('passwordLength');
 const specialChars = document.getElementById('specialChars');
+const generateLocally = document.getElementById('generateLocally');
+const generationModeHelp = document.getElementById('generationModeHelp');
 const excludeAmbiguous = document.getElementById('excludeAmbiguous');
 const strengthIndicator = document.getElementById('strengthIndicator');
 const strengthFill = document.getElementById('strengthFill');
 const strengthText = document.getElementById('strengthText');
 const quickSelectButtons = document.querySelectorAll('.btn-quick');
+
+// Shared constants
+const DEFAULT_SPECIAL_CHARS = '!@#*';
+const MIN_PASSWORD_LENGTH = Number.parseInt(passwordLength.min, 10) || 4;
+const MAX_PASSWORD_LENGTH = Number.parseInt(passwordLength.max, 10) || 128;
+const MAX_SPECIAL_CHARS_INPUT = Number.parseInt(
+    specialChars.getAttribute('maxlength'),
+    10
+) || 128;
+const AMBIGUOUS_CHARS = new Set('0Ol1I');
+const ASCII_PUNCTUATION = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~";
 
 // State
 let currentPassword = '';
@@ -16,38 +29,35 @@ let currentPassword = '';
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     setupEventListeners();
-    setActiveQuickButton(8); // Set default active button
+    setActiveQuickButton(sanitizeLength(passwordLength.value));
+    updateGenerationModeHelp();
 });
 
 /**
- * Set up all event listeners
+ * Set up all event listeners.
  */
 function setupEventListeners() {
-    // Generate button
     generateBtn.addEventListener('click', generatePassword);
-
-    // Copy button
     copyBtn.addEventListener('click', copyToClipboard);
+    generateLocally.addEventListener('change', updateGenerationModeHelp);
 
-    // Quick select buttons
-    quickSelectButtons.forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const length = parseInt(e.target.dataset.length);
-            passwordLength.value = length;
+    quickSelectButtons.forEach((button) => {
+        button.addEventListener('click', (event) => {
+            const length = Number.parseInt(event.currentTarget.dataset.length, 10);
+            passwordLength.value = sanitizeLength(length);
             setActiveQuickButton(length);
         });
     });
 
-    // Password length input change
-    passwordLength.addEventListener('input', (e) => {
-        const length = parseInt(e.target.value);
+    passwordLength.addEventListener('input', (event) => {
+        const length = sanitizeLength(event.target.value);
         setActiveQuickButton(length);
     });
 
-    // Enter key on inputs
-    [passwordLength, specialChars].forEach(input => {
-        input.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
+    [passwordLength, specialChars].forEach((input) => {
+        input.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
                 generatePassword();
             }
         });
@@ -55,106 +65,252 @@ function setupEventListeners() {
 }
 
 /**
- * Set active state for quick select button
+ * Set active state for quick select buttons.
  */
 function setActiveQuickButton(length) {
-    quickSelectButtons.forEach(btn => {
-        const btnLength = parseInt(btn.dataset.length);
-        if (btnLength === length) {
-            btn.classList.add('active');
-        } else {
-            btn.classList.remove('active');
-        }
+    quickSelectButtons.forEach((button) => {
+        const buttonLength = Number.parseInt(button.dataset.length, 10);
+        button.classList.toggle('active', buttonLength === length);
     });
 }
 
 /**
- * Generate password via API
+ * Update the help text for the active generation mode.
+ */
+function updateGenerationModeHelp() {
+    generationModeHelp.textContent = generateLocally.checked
+        ? 'Local mode uses the Web Crypto API and keeps password generation in this browser.'
+    : 'Server mode is the default. The password is generated on the server and returned over a same-origin request.';
+}
+
+/**
+ * Collect, sanitize, and normalize form values before generation.
+ */
+function collectGenerationOptions() {
+    const length = sanitizeLength(passwordLength.value);
+    passwordLength.value = length;
+
+    return {
+        length,
+        specialChars: sanitizeSpecialChars(specialChars.value),
+        excludeAmbiguous: excludeAmbiguous.checked,
+    };
+}
+
+/**
+ * Generate a password either locally or via the server API.
  */
 async function generatePassword() {
     try {
-        // Disable button during request
         generateBtn.disabled = true;
-        generateBtn.textContent = 'Generating...';
+        generateBtn.textContent = generateLocally.checked
+            ? 'Generating Locally...'
+            : 'Generating...';
 
-        // Collect form data
-        const data = {
-            length: parseInt(passwordLength.value) || 8,
-            special_chars: specialChars.value || '!,@,#,*',
-            exclude_ambiguous: excludeAmbiguous.checked
-        };
+        const options = collectGenerationOptions();
+        const result = generateLocally.checked
+            ? generatePasswordLocally(options)
+            : await generatePasswordOnServer(options);
 
-        // Make API request
-        const response = await fetch('/api/generate', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(data)
-        });
-
-        const result = await response.json();
-
-        if (result.success) {
-            // Display password
-            currentPassword = result.password;
-            displayPassword(result.password);
-            
-            // Update strength indicator
-            updateStrengthIndicator(result.strength);
-            
-            // Enable copy button
-            copyBtn.disabled = false;
-        } else {
-            showToast('Error generating password: ' + result.error, 'error');
-        }
+        currentPassword = result.password;
+        displayPassword(result.password);
+        updateStrengthIndicator(result.strength);
+        copyBtn.disabled = false;
     } catch (error) {
-        console.error('Error:', error);
-        showToast('Failed to generate password. Please try again.', 'error');
+        console.error('Password generation failed:', error);
+        showToast(error.message || 'Failed to generate password. Please try again.', 'error');
     } finally {
-        // Re-enable button
         generateBtn.disabled = false;
         generateBtn.textContent = 'Generate Password';
     }
 }
 
 /**
- * Display password in the UI
+ * Request a server-generated password from the Flask API.
  */
-function displayPassword(password) {
-    passwordDisplay.classList.add('has-password');
-    passwordDisplay.innerHTML = `<span>${escapeHtml(password)}</span>`;
+async function generatePasswordOnServer(options) {
+    const response = await fetch('/api/generate', {
+        method: 'POST',
+        cache: 'no-store',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            length: options.length,
+            special_chars: options.specialChars,
+            exclude_ambiguous: options.excludeAmbiguous,
+        }),
+    });
+
+    let result;
+    try {
+        result = await response.json();
+    } catch (error) {
+        throw new Error('Server returned an invalid response.');
+    }
+
+    if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Password generation failed.');
+    }
+
+    return result;
 }
 
 /**
- * Update strength indicator
+ * Generate a password locally using the Web Crypto API.
+ */
+function generatePasswordLocally(options) {
+    if (!window.crypto || typeof window.crypto.getRandomValues !== 'function') {
+        throw new Error('This browser does not support secure local generation.');
+    }
+
+    const charPool = buildCharacterPool(options.specialChars, options.excludeAmbiguous);
+    let password = '';
+
+    for (let index = 0; index < options.length; index += 1) {
+        password += charPool[getSecureRandomIndex(charPool.length)];
+    }
+
+    return {
+        success: true,
+        password,
+        strength: calculatePasswordStrength(password, options.length),
+        length: options.length,
+        mode: 'local',
+    };
+}
+
+/**
+ * Build the available character pool for either generation mode.
+ */
+function buildCharacterPool(specialCharacters, excludeAmbiguousCharacters) {
+    let pool =
+        'ABCDEFGHIJKLMNOPQRSTUVWXYZ' +
+        'abcdefghijklmnopqrstuvwxyz' +
+        '0123456789' +
+        specialCharacters;
+
+    if (excludeAmbiguousCharacters) {
+        pool = [...pool].filter((character) => !AMBIGUOUS_CHARS.has(character)).join('');
+    }
+
+    return pool || 'abcdefghijklmnopqrstuvwxyz0123456789';
+}
+
+/**
+ * Return a uniformly distributed secure index within the requested range.
+ */
+function getSecureRandomIndex(maxExclusive) {
+    if (!Number.isInteger(maxExclusive) || maxExclusive <= 0) {
+        throw new Error('Invalid secure random range requested.');
+    }
+
+    const maxUint32 = 0x100000000;
+    const cutoff = Math.floor(maxUint32 / maxExclusive) * maxExclusive;
+    const buffer = new Uint32Array(1);
+
+    do {
+        window.crypto.getRandomValues(buffer);
+    } while (buffer[0] >= cutoff);
+
+    return buffer[0] % maxExclusive;
+}
+
+/**
+ * Clamp password length to the values enforced by the server.
+ */
+function sanitizeLength(lengthValue) {
+    const parsedLength = Number.parseInt(lengthValue, 10);
+    if (Number.isNaN(parsedLength)) {
+        return 8;
+    }
+
+    return Math.min(Math.max(parsedLength, MIN_PASSWORD_LENGTH), MAX_PASSWORD_LENGTH);
+}
+
+/**
+ * Keep only printable ASCII punctuation and bound the input size.
+ */
+function sanitizeSpecialChars(value) {
+    if (typeof value !== 'string') {
+        return DEFAULT_SPECIAL_CHARS;
+    }
+
+    const trimmedValue = value.trim();
+    if (!trimmedValue || trimmedValue.length > MAX_SPECIAL_CHARS_INPUT) {
+        return DEFAULT_SPECIAL_CHARS;
+    }
+
+    const joinedValue = trimmedValue
+        .split(',')
+        .map((part) => part.trim())
+        .join('');
+
+    const sanitizedChars = [];
+    const seenChars = new Set();
+    for (const character of joinedValue) {
+        if (ASCII_PUNCTUATION.includes(character) && !seenChars.has(character)) {
+            sanitizedChars.push(character);
+            seenChars.add(character);
+        }
+    }
+
+    return sanitizedChars.join('') || DEFAULT_SPECIAL_CHARS;
+}
+
+/**
+ * Estimate password strength using the same rules as the server.
+ */
+function calculatePasswordStrength(password, length) {
+    const hasUpper = [...password].some((character) => /[A-Z]/.test(character));
+    const hasLower = [...password].some((character) => /[a-z]/.test(character));
+    const hasDigit = [...password].some((character) => /[0-9]/.test(character));
+    const hasSpecial = [...password].some((character) => ASCII_PUNCTUATION.includes(character));
+    const diversity = [hasUpper, hasLower, hasDigit, hasSpecial].filter(Boolean).length;
+
+    if (length >= 12 && diversity >= 3) {
+        return 'strong';
+    }
+    if (length >= 10 && diversity >= 2) {
+        return 'medium';
+    }
+    if (length >= 8 && diversity >= 2) {
+        return 'medium';
+    }
+    return 'weak';
+}
+
+/**
+ * Display password in the UI without using HTML injection.
+ */
+function displayPassword(password) {
+    passwordDisplay.classList.add('has-password');
+    passwordDisplay.textContent = password;
+}
+
+/**
+ * Update the strength indicator styles and label.
  */
 function updateStrengthIndicator(strength) {
-    strengthIndicator.style.display = 'block';
-    
-    // Remove all strength classes
+    strengthIndicator.classList.remove('is-hidden');
     strengthFill.classList.remove('weak', 'medium', 'strong');
     strengthText.classList.remove('weak', 'medium', 'strong');
-    
-    // Add appropriate class
     strengthFill.classList.add(strength);
     strengthText.classList.add(strength);
-    
-    // Update text
     strengthText.textContent = strength.charAt(0).toUpperCase() + strength.slice(1);
 }
 
 /**
- * Copy password to clipboard
+ * Copy the current password to the clipboard.
  */
 async function copyToClipboard() {
-    if (!currentPassword) return;
+    if (!currentPassword) {
+        return;
+    }
 
     try {
         await navigator.clipboard.writeText(currentPassword);
         showToast('Password copied to clipboard!');
-        
-        // Visual feedback
         copyBtn.textContent = '✓ Copied';
         setTimeout(() => {
             copyBtn.innerHTML = `
@@ -166,15 +322,13 @@ async function copyToClipboard() {
             `;
         }, 2000);
     } catch (error) {
-        console.error('Failed to copy:', error);
-        
-        // Fallback for older browsers
+        console.error('Failed to copy password:', error);
         fallbackCopyToClipboard(currentPassword);
     }
 }
 
 /**
- * Fallback copy method for older browsers
+ * Fallback copy method for browsers that do not support the Clipboard API.
  */
 function fallbackCopyToClipboard(text) {
     const textArea = document.createElement('textarea');
@@ -183,52 +337,40 @@ function fallbackCopyToClipboard(text) {
     textArea.style.left = '-9999px';
     document.body.appendChild(textArea);
     textArea.select();
-    
+
     try {
         document.execCommand('copy');
         showToast('Password copied to clipboard!');
     } catch (error) {
-        showToast('Failed to copy password', 'error');
+        showToast('Failed to copy password.', 'error');
     }
-    
+
     document.body.removeChild(textArea);
 }
 
 /**
- * Show toast notification
+ * Show a transient toast notification.
  */
 function showToast(message, type = 'success') {
-    // Remove existing toast if any
     const existingToast = document.querySelector('.toast');
     if (existingToast) {
         existingToast.remove();
     }
 
-    // Create toast element
     const toast = document.createElement('div');
     toast.className = 'toast';
     toast.textContent = message;
-    
+
     if (type === 'error') {
         toast.style.background = '#ef4444';
     }
 
     document.body.appendChild(toast);
 
-    // Auto-remove after 3 seconds
     setTimeout(() => {
         toast.classList.add('hiding');
         setTimeout(() => {
             toast.remove();
         }, 300);
     }, 3000);
-}
-
-/**
- * Escape HTML to prevent XSS
- */
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
 }

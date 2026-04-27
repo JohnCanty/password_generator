@@ -180,6 +180,10 @@ body {
     margin-bottom: 1.5rem;
 }
 
+.is-hidden {
+    display: none;
+}
+
 .strength-label {
     font-size: 0.875rem;
     font-weight: 600;
@@ -300,6 +304,10 @@ body {
 
 .checkbox-label span {
     font-weight: 500;
+}
+
+#generationModeHelp {
+    min-height: 2.5rem;
 }
 
 /* Footer */
