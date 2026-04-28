@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="no-referrer">
     <title>Secure Password Generator</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
@@ -29,7 +30,7 @@
             </div>
 
             <!-- Password Strength Indicator -->
-            <div class="strength-indicator" id="strengthIndicator" style="display: none;">
+            <div class="strength-indicator is-hidden" id="strengthIndicator">
                 <div class="strength-label">Password Strength:</div>
                 <div class="strength-bar">
                     <div class="strength-fill" id="strengthFill"></div>
@@ -46,9 +47,9 @@
                         type="number" 
                         id="passwordLength" 
                         class="form-control" 
-                        value="8" 
-                        min="4" 
-                        max="128"
+                        value="{{ default_length }}" 
+                        min="{{ min_length }}" 
+                        max="{{ max_length }}"
                     >
                 </div>
 
@@ -70,10 +71,29 @@
                         type="text" 
                         id="specialChars" 
                         class="form-control" 
-                        value="!, @, #, *"
+                        value="{{ default_special_chars_display }}"
                         placeholder="e.g., !, @, #, $, %, &"
+                        maxlength="{{ max_special_chars_input }}"
+                        spellcheck="false"
+                        autocapitalize="off"
+                        autocomplete="off"
                     >
-                    <small class="form-help">Enter special characters separated by commas</small>
+                    <small class="form-help">Enter punctuation characters separated by commas. Non-punctuation input is ignored.</small>
+                </div>
+
+                <!-- Generation Mode -->
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input 
+                            type="checkbox" 
+                            id="generateLocally"
+                            {% if local_generation_default %}checked{% endif %}
+                        >
+                        <span>Generate locally in this browser</span>
+                    </label>
+                    <small class="form-help" id="generationModeHelp">
+                        Server mode is the default. The password is generated on the server and returned over a same-origin request.
+                    </small>
                 </div>
 
                 <!-- Exclude Ambiguous Characters -->
@@ -98,10 +118,10 @@
 
         <!-- Footer -->
         <div class="footer">
-            <p>✓ Cryptographically secure random generation</p>
-            <p>Browser makes a POST API request to /api/generate</p>
-            <p>Password is generated server-side and returned in the response</p>
-            <p>Intended for TLS-secured connections to a server with a Random Noise seed.</p>
+            <p>Cryptographically secure random generation is available in both modes.</p>
+            <p>Server mode returns the generated password from the server and should be deployed over HTTPS.</p>
+            <p>Local mode uses the Web Crypto API and keeps password generation in the browser.</p>
+            <p>For internet-facing use, deploy behind HTTPS and a reverse proxy.</p>
         </div>
     </div>
 
