@@ -77,6 +77,19 @@ Gunicorn also binds to localhost by default so that a reverse proxy can publish 
 gunicorn -c gunicorn_config.py app:app
 ```
 
+You can also omit the app import target entirely because [gunicorn_config.py](gunicorn_config.py) now sets `wsgi_app = "app:app"`:
+
+```bash
+gunicorn -c gunicorn_config.py
+```
+
+The Gunicorn configuration sets its working directory to the application directory automatically, so an absolute-path invocation also works from outside the project directory:
+
+```bash
+/opt/password_generator/app/venv/bin/gunicorn \
+  -c /opt/password_generator/app/gunicorn_config.py
+```
+
 By default, this listens on:
 
 ```text
@@ -104,6 +117,7 @@ sudo systemctl reload caddy
 ```
 
 If you manage Gunicorn with `systemd`, add `Environment=TRUST_PROXY_HEADERS=true` to the service unit.
+Using `WorkingDirectory=/opt/password_generator/app` is still good practice for the service unit, but Gunicorn no longer depends on the caller's current directory to import `app:app`.
 
 ## Configuration
 

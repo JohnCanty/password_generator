@@ -12,6 +12,9 @@ import os
 from pathlib import Path
 
 
+APP_DIR = Path(__file__).resolve().parent
+
+
 def env_flag(name: str, default: bool = False) -> bool:
     """Read a boolean flag from the environment."""
     value = os.getenv(name)
@@ -30,6 +33,8 @@ def bind_is_public(value: str) -> bool:
 # Server socket
 bind = os.getenv("GUNICORN_BIND", "127.0.0.1:2048")
 backlog = int(os.getenv("GUNICORN_BACKLOG", "2048"))
+chdir = str(APP_DIR)
+wsgi_app = os.getenv("GUNICORN_WSGI_APP", "app:app")
 
 # TLS is optional when a reverse proxy terminates HTTPS, but required for a
 # direct public bind unless ALLOW_INSECURE_PUBLIC_BIND is explicitly enabled.
